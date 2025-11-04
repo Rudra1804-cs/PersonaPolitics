@@ -85,6 +85,28 @@ export interface BlocOpinion {
   history: Array<{ t: number; score: number }>
 }
 
+export type AgeKey = "18_30" | "31_60" | "60_80" | "80_plus"
+export type GenderKey = "male" | "female" | "other"
+export type SegTrend = { t: number; value: number }
+
+export interface ExitPoll {
+  sample: number
+  moe: number
+  lastUpdated: number
+  age: Record<AgeKey, number>
+  gender: Record<GenderKey, number>
+  ownParty: number
+  urban: number
+  rural: number
+  undecided: number
+  trends: {
+    overall: SegTrend[]
+    age: Record<AgeKey, SegTrend[]>
+    gender: Record<GenderKey, SegTrend[]>
+    ownParty: SegTrend[]
+  }
+}
+
 interface GameState {
   stats: Stats
   isGameOver: boolean
@@ -112,6 +134,19 @@ interface GameState {
   initForeignOpinions: () => void
   applyForeignDelta: (bloc: BlocKey, d: { score?: number; reason?: string }) => void
   recomputeBlocStance: (bloc: BlocKey) => void
+  exitPoll: ExitPoll
+  initExitPoll: () => void
+  applyExitPollDelta: (
+    d: Partial<{
+      age: Partial<Record<AgeKey, number>>
+      gender: Partial<Record<GenderKey, number>>
+      ownParty: number
+      urban: number
+      rural: number
+      undecided: number
+      overall: number
+    }>,
+  ) => void
   updateStats: (changes: Partial<Stats>) => void
   resetGame: () => void
   checkGameOver: () => void
@@ -308,6 +343,143 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
     })
   },
+  exitPoll: {
+    sample: 5000,
+    moe: 2.3,
+    lastUpdated: Date.now(),
+    age: {
+      "18_30": 48,
+      "31_60": 52,
+      "60_80": 54,
+      "80_plus": 51,
+    },
+    gender: {
+      male: 50,
+      female: 51,
+      other: 49,
+    },
+    ownParty: 55,
+    urban: 49,
+    rural: 53,
+    undecided: 18,
+    trends: {
+      overall: [{ t: 0, value: 50 }],
+      age: {
+        "18_30": [{ t: 0, value: 48 }],
+        "31_60": [{ t: 0, value: 52 }],
+        "60_80": [{ t: 0, value: 54 }],
+        "80_plus": [{ t: 0, value: 51 }],
+      },
+      gender: {
+        male: [{ t: 0, value: 50 }],
+        female: [{ t: 0, value: 51 }],
+        other: [{ t: 0, value: 49 }],
+      },
+      ownParty: [{ t: 0, value: 55 }],
+    },
+  },
+  initExitPoll: () => {
+    set({
+      exitPoll: {
+        sample: 5000,
+        moe: 2.3,
+        lastUpdated: Date.now(),
+        age: {
+          "18_30": 48,
+          "31_60": 52,
+          "60_80": 54,
+          "80_plus": 51,
+        },
+        gender: {
+          male: 50,
+          female: 51,
+          other: 49,
+        },
+        ownParty: 55,
+        urban: 49,
+        rural: 53,
+        undecided: 18,
+        trends: {
+          overall: [{ t: 0, value: 50 }],
+          age: {
+            "18_30": [{ t: 0, value: 48 }],
+            "31_60": [{ t: 0, value: 52 }],
+            "60_80": [{ t: 0, value: 54 }],
+            "80_plus": [{ t: 0, value: 51 }],
+          },
+          gender: {
+            male: [{ t: 0, value: 50 }],
+            female: [{ t: 0, value: 51 }],
+            other: [{ t: 0, value: 49 }],
+          },
+          ownParty: [{ t: 0, value: 55 }],
+        },
+      },
+    })
+  },
+  applyExitPollDelta: (d) => {
+    set((state) => {
+      const currentTime = state.termSecondsTotal - state.termSecondsLeft
+      const newPoll = { ...state.exitPoll }
+
+      // Update age groups
+      if (d.age) {
+        for (const key of Object.keys(d.age) as AgeKey[]) {
+          const delta = d.age[key]
+          if (delta !== undefined) {
+            newPoll.age[key] = Math.max(0, Math.min(100, newPoll.age[key] + delta))
+            newPoll.trends.age[key] = [...newPoll.trends.age[key], { t: currentTime, value: newPoll.age[key] }].slice(
+              -40,
+            )
+          }
+        }
+      }
+
+      // Update gender
+      if (d.gender) {
+        for (const key of Object.keys(d.gender) as GenderKey[]) {
+          const delta = d.gender[key]
+          if (delta !== undefined) {
+            newPoll.gender[key] = Math.max(0, Math.min(100, newPoll.gender[key] + delta))
+            newPoll.trends.gender[key] = [
+              ...newPoll.trends.gender[key],
+              { t: currentTime, value: newPoll.gender[key] },
+            ].slice(-40)
+          }
+        }
+      }
+
+      // Update own party
+      if (d.ownParty !== undefined) {
+        newPoll.ownParty = Math.max(0, Math.min(100, newPoll.ownParty + d.ownParty))
+        newPoll.trends.ownParty = [...newPoll.trends.ownParty, { t: currentTime, value: newPoll.ownParty }].slice(-40)
+      }
+
+      // Update urban/rural/undecided
+      if (d.urban !== undefined) {
+        newPoll.urban = Math.max(0, Math.min(100, newPoll.urban + d.urban))
+      }
+      if (d.rural !== undefined) {
+        newPoll.rural = Math.max(0, Math.min(100, newPoll.rural + d.rural))
+      }
+      if (d.undecided !== undefined) {
+        newPoll.undecided = Math.max(0, Math.min(100, newPoll.undecided + d.undecided))
+      }
+
+      // Update overall trend
+      if (d.overall !== undefined) {
+        const avgAge = (newPoll.age["18_30"] + newPoll.age["31_60"] + newPoll.age["60_80"] + newPoll.age["80_plus"]) / 4
+        const overall = Math.max(0, Math.min(100, avgAge + d.overall))
+        newPoll.trends.overall = [...newPoll.trends.overall, { t: currentTime, value: overall }].slice(-40)
+      }
+
+      // Update MOE with jitter
+      newPoll.moe = 2.3 + (Math.random() * 0.8 - 0.4)
+      newPoll.lastUpdated = Date.now()
+
+      return { exitPoll: newPoll }
+    })
+  },
   updateStats: (changes) => {
     if (get().termOver) return
 
@@ -340,6 +512,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     set({ termStarted: true, termOver: false })
     get().initEconomy()
     get().initForeignOpinions()
+    get().initExitPoll()
   },
   tickTerm: () => {
     const state = get()
@@ -371,9 +544,45 @@ export const useGameStore = create<GameState>((set, get) => ({
       },
       statToasts: [],
       hoveredPolicy: null,
+      exitPoll: {
+        sample: 5000,
+        moe: 2.3,
+        lastUpdated: Date.now(),
+        age: {
+          "18_30": 48,
+          "31_60": 52,
+          "60_80": 54,
+          "80_plus": 51,
+        },
+        gender: {
+          male: 50,
+          female: 51,
+          other: 49,
+        },
+        ownParty: 55,
+        urban: 49,
+        rural: 53,
+        undecided: 18,
+        trends: {
+          overall: [{ t: 0, value: 50 }],
+          age: {
+            "18_30": [{ t: 0, value: 48 }],
+            "31_60": [{ t: 0, value: 52 }],
+            "60_80": [{ t: 0, value: 54 }],
+            "80_plus": [{ t: 0, value: 51 }],
+          },
+          gender: {
+            male: [{ t: 0, value: 50 }],
+            female: [{ t: 0, value: 51 }],
+            other: [{ t: 0, value: 49 }],
+          },
+          ownParty: [{ t: 0, value: 55 }],
+        },
+      },
     })
     get().initEconomy()
     get().initForeignOpinions()
+    get().initExitPoll()
   },
   addPolicyLog: (entry) => {
     set((state) => ({

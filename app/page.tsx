@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { PolicyCard } from "@/components/PolicyCard"
 import { StatsBar } from "@/components/StatsBar"
 import { GameModal } from "@/components/GameModal"
@@ -15,6 +15,8 @@ import { CabinetMeter } from "@/components/CabinetMeter"
 import { AmbienceGauges } from "@/components/AmbienceGauges"
 import { EconomySnapshot } from "@/components/EconomySnapshot"
 import { ForeignOpinionsStrip } from "@/components/ForeignOpinionsStrip"
+import { ExitPollPanel } from "@/components/ExitPollPanel"
+import { pollShift, pollTimeDrift } from "@/lib/pollHeuristics"
 import { useGameStore } from "@/lib/state"
 import { useTermTimer } from "@/hooks/useTermTimer"
 import { pickGameForPolicy } from "@/lib/games/registry"
@@ -67,6 +69,8 @@ export default function Home() {
     applyEconomyDelta,
     applyForeignDelta,
     recomputeBlocStance,
+    applyExitPollDelta,
+    initExitPoll,
   } = useGameStore()
 
   useTermTimer()
@@ -185,6 +189,25 @@ export default function Home() {
         recomputeBlocStance(impact.bloc)
       }
 
+      const currentStats = useGameStore.getState().stats
+      const currentEconomy = useGameStore.getState().economy
+      const pollContext = {
+        approval: currentStats.approval,
+        power: currentStats.power,
+        standing: currentStats.standing,
+        economy: {
+          gdp: currentEconomy.gdp,
+          infl: currentEconomy.infl,
+          unemp: currentEconomy.unemp,
+          conf: currentEconomy.conf,
+        },
+        policyId: currentPolicy.id,
+        decision: result.approved ? ("approve" as const) : ("reject" as const),
+        result: result.approved ? ("win" as const) : ("loss" as const),
+        difficulty: currentDifficulty.toUpperCase() as "EASY" | "MEDIUM" | "HARD",
+      }
+      applyExitPollDelta(pollShift(pollContext))
+
       const remark = pickSecretaryRemark(deltaTotal)
       secretary.push(remark)
 
@@ -201,7 +224,6 @@ export default function Home() {
         time: termSecondsTotal - termSecondsLeft,
       })
 
-      const currentStats = useGameStore.getState().stats
       const updatedPolicyLog = useGameStore.getState().policyLog
       const worldEvent = generateWorldEvent(currentStats, updatedPolicyLog)
 
@@ -231,6 +253,19 @@ export default function Home() {
       })
     }
   }
+
+  useEffect(() => {
+    initExitPoll()
+  }, [initExitPoll])
+
+  useEffect(() => {
+    if (!termStarted || termOver) return
+    const id = setInterval(() => {
+      const ap = useGameStore.getState().stats.approval
+      applyExitPollDelta(pollTimeDrift(ap))
+    }, 20000)
+    return () => clearInterval(id)
+  }, [termStarted, termOver, applyExitPollDelta])
 
   return (
     <>
@@ -303,6 +338,8 @@ export default function Home() {
           <EconomySnapshot />
 
           <ForeignOpinionsStrip />
+
+          <ExitPollPanel />
 
           <div className="text-center">
             <p className="text-sm text-blue-300">Runs locally using Ollama (Mistral). No external LLMs.</p>
