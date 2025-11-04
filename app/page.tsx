@@ -11,6 +11,7 @@ import { WorldEventsFeed } from "@/components/WorldEventsFeed"
 import { SecretaryBubble } from "@/components/SecretaryBubble"
 import { StatToasts } from "@/components/StatToasts"
 import { WorldMapBackdrop } from "@/components/WorldMapBackdrop"
+import { CabinetMeter } from "@/components/CabinetMeter"
 import { useGameStore } from "@/lib/state"
 import { useTermTimer } from "@/hooks/useTermTimer"
 import { pickGameForPolicy } from "@/lib/games/registry"
@@ -219,25 +220,37 @@ export default function Home() {
               <StatsBar label="Standing" value={stats.standing} />
             </div>
 
-            <div className="rounded-xl bg-slate-800/50 p-4 backdrop-blur">
-              <div className="text-center space-y-2">
-                <p className="text-sm text-blue-200">Time Remaining</p>
-                <p
-                  className={`text-3xl font-bold ${
-                    termSecondsLeft <= 30 ? "text-red-400 animate-pulse" : "text-white"
-                  }`}
-                >
-                  {formatTime(termSecondsLeft)}
-                </p>
-                {!termStarted && !termOver && <p className="text-xs text-blue-300">Click any policy to start</p>}
+            <div className="space-y-4">
+              <div className="rounded-xl bg-slate-800/50 p-4 backdrop-blur">
+                <div className="text-center space-y-2">
+                  <p className="text-sm text-blue-200">Time Remaining</p>
+                  <p
+                    className={`text-3xl font-bold ${
+                      termSecondsLeft <= 30 ? "text-red-400 animate-pulse" : "text-white"
+                    }`}
+                  >
+                    {formatTime(termSecondsLeft)}
+                  </p>
+                  {!termStarted && !termOver && <p className="text-xs text-blue-300">Click any policy to start</p>}
+                </div>
+              </div>
+
+              {/* Cabinet Meter - shows below timer on desktop */}
+              <div className="hidden md:block">
+                <CabinetMeter />
               </div>
             </div>
+          </div>
+
+          <div className="md:hidden">
+            <CabinetMeter />
           </div>
 
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {POLICIES.map((policy) => (
               <PolicyCard
                 key={policy.id}
+                id={policy.id}
                 title={policy.title}
                 description={policy.description}
                 difficulty={policy.difficulty.toUpperCase() as "EASY" | "MEDIUM" | "HARD"}

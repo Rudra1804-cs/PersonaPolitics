@@ -52,6 +52,12 @@ export interface StatToast {
   time: number
 }
 
+export interface HoveredPolicy {
+  id: string
+  title: string
+  difficulty: "easy" | "medium" | "hard"
+}
+
 interface GameState {
   stats: Stats
   isGameOver: boolean
@@ -70,6 +76,8 @@ interface GameState {
   statToasts: StatToast[]
   pushStatToast: (t: { a?: number; p?: number; s?: number }) => void
   clearOldStatToasts: () => void
+  hoveredPolicy: HoveredPolicy | null
+  setHoveredPolicy: (policy: HoveredPolicy | null) => void
   updateStats: (changes: Partial<Stats>) => void
   resetGame: () => void
   checkGameOver: () => void
@@ -141,6 +149,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       statToasts: state.statToasts.filter((toast) => now - toast.time < 5000),
     }))
   },
+  hoveredPolicy: null,
+  setHoveredPolicy: (policy) => set({ hoveredPolicy: policy }),
   updateStats: (changes) => {
     if (get().termOver) return
 
@@ -201,6 +211,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         queue: [],
       },
       statToasts: [],
+      hoveredPolicy: null,
     })
   },
   addPolicyLog: (entry) => {

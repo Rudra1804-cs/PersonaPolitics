@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { useGameStore } from "@/lib/state"
 
 interface PolicyCardProps {
+  id: string
   title: string
   description: string
   difficulty: string
@@ -12,8 +13,9 @@ interface PolicyCardProps {
   onReject: () => void
 }
 
-export function PolicyCard({ title, description, difficulty, onApprove, onReject }: PolicyCardProps) {
+export function PolicyCard({ id, title, description, difficulty, onApprove, onReject }: PolicyCardProps) {
   const termOver = useGameStore((state) => state.termOver)
+  const setHoveredPolicy = useGameStore((state) => state.setHoveredPolicy)
 
   const handleApprove = () => {
     if (termOver) return
@@ -25,8 +27,39 @@ export function PolicyCard({ title, description, difficulty, onApprove, onReject
     onReject()
   }
 
+  const handleMouseEnter = () => {
+    setHoveredPolicy({
+      id,
+      title,
+      difficulty: difficulty.toLowerCase() as "easy" | "medium" | "hard",
+    })
+  }
+
+  const handleMouseLeave = () => {
+    setHoveredPolicy(null)
+  }
+
+  const handleFocus = () => {
+    setHoveredPolicy({
+      id,
+      title,
+      difficulty: difficulty.toLowerCase() as "easy" | "medium" | "hard",
+    })
+  }
+
+  const handleBlur = () => {
+    setHoveredPolicy(null)
+  }
+
   return (
-    <Card className="flex h-full flex-col">
+    <Card
+      className="flex h-full flex-col"
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      onFocus={handleFocus}
+      onBlur={handleBlur}
+      tabIndex={0}
+    >
       <CardHeader>
         <CardTitle className="text-balance">{title}</CardTitle>
         <CardDescription className="text-pretty">{description}</CardDescription>
