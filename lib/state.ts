@@ -76,6 +76,15 @@ export interface Economy {
   history: EconPoint[]
 }
 
+export type BlocKey = "NATO" | "EU" | "BRICS" | "OIC" | "SCO"
+
+export interface BlocOpinion {
+  score: number
+  stance: "Supportive" | "Neutral" | "Critical"
+  reason: string
+  history: Array<{ t: number; score: number }>
+}
+
 interface GameState {
   stats: Stats
   isGameOver: boolean
@@ -99,6 +108,10 @@ interface GameState {
   economy: Economy
   initEconomy: () => void
   applyEconomyDelta: (d: { gdp?: number; infl?: number; unemp?: number; market?: number; conf?: number }) => void
+  foreignOpinions: Record<BlocKey, BlocOpinion>
+  initForeignOpinions: () => void
+  applyForeignDelta: (bloc: BlocKey, d: { score?: number; reason?: string }) => void
+  recomputeBlocStance: (bloc: BlocKey) => void
   updateStats: (changes: Partial<Stats>) => void
   resetGame: () => void
   checkGameOver: () => void
@@ -227,6 +240,74 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
     })
   },
+  foreignOpinions: {
+    NATO: { score: 50, stance: "Neutral", reason: "", history: [{ t: 0, score: 50 }] },
+    EU: { score: 50, stance: "Neutral", reason: "", history: [{ t: 0, score: 50 }] },
+    BRICS: { score: 50, stance: "Neutral", reason: "", history: [{ t: 0, score: 50 }] },
+    OIC: { score: 50, stance: "Neutral", reason: "", history: [{ t: 0, score: 50 }] },
+    SCO: { score: 50, stance: "Neutral", reason: "", history: [{ t: 0, score: 50 }] },
+  },
+  initForeignOpinions: () => {
+    set({
+      foreignOpinions: {
+        NATO: { score: 50, stance: "Neutral", reason: "", history: [{ t: 0, score: 50 }] },
+        EU: { score: 50, stance: "Neutral", reason: "", history: [{ t: 0, score: 50 }] },
+        BRICS: { score: 50, stance: "Neutral", reason: "", history: [{ t: 0, score: 50 }] },
+        OIC: { score: 50, stance: "Neutral", reason: "", history: [{ t: 0, score: 50 }] },
+        SCO: { score: 50, stance: "Neutral", reason: "", history: [{ t: 0, score: 50 }] },
+      },
+    })
+  },
+  applyForeignDelta: (bloc, d) => {
+    set((state) => {
+      const current = state.foreignOpinions[bloc]
+      const newScore = Math.max(0, Math.min(100, current.score + (d.score || 0)))
+      const newReason = d.reason !== undefined ? d.reason : current.reason
+
+      const newPoint = {
+        t: state.termSecondsTotal - state.termSecondsLeft,
+        score: newScore,
+      }
+
+      const newHistory = [...current.history, newPoint].slice(-40)
+
+      return {
+        foreignOpinions: {
+          ...state.foreignOpinions,
+          [bloc]: {
+            ...current,
+            score: newScore,
+            reason: newReason,
+            history: newHistory,
+          },
+        },
+      }
+    })
+  },
+  recomputeBlocStance: (bloc) => {
+    set((state) => {
+      const current = state.foreignOpinions[bloc]
+      let stance: "Supportive" | "Neutral" | "Critical"
+
+      if (current.score >= 67) {
+        stance = "Supportive"
+      } else if (current.score >= 34) {
+        stance = "Neutral"
+      } else {
+        stance = "Critical"
+      }
+
+      return {
+        foreignOpinions: {
+          ...state.foreignOpinions,
+          [bloc]: {
+            ...current,
+            stance,
+          },
+        },
+      }
+    })
+  },
   updateStats: (changes) => {
     if (get().termOver) return
 
@@ -258,6 +339,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   startTerm: () => {
     set({ termStarted: true, termOver: false })
     get().initEconomy()
+    get().initForeignOpinions()
   },
   tickTerm: () => {
     const state = get()
@@ -291,6 +373,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       hoveredPolicy: null,
     })
     get().initEconomy()
+    get().initForeignOpinions()
   },
   addPolicyLog: (entry) => {
     set((state) => ({

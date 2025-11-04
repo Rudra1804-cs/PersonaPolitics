@@ -14,12 +14,14 @@ import { WorldMapBackdrop } from "@/components/WorldMapBackdrop"
 import { CabinetMeter } from "@/components/CabinetMeter"
 import { AmbienceGauges } from "@/components/AmbienceGauges"
 import { EconomySnapshot } from "@/components/EconomySnapshot"
+import { ForeignOpinionsStrip } from "@/components/ForeignOpinionsStrip"
 import { useGameStore } from "@/lib/state"
 import { useTermTimer } from "@/hooks/useTermTimer"
 import { pickGameForPolicy } from "@/lib/games/registry"
 import { generateWorldEvent } from "@/lib/worldEvents"
 import { pickSecretaryRemark } from "@/lib/secretaryRemarks"
 import { realizedImpactFrom } from "@/lib/econHeuristics"
+import { realizedGeoImpact } from "@/lib/geoHeuristics"
 import { playEventSound } from "@/lib/audio"
 import type { MiniGameDef, Difficulty, GameResult } from "@/lib/games/types"
 import type { PolicyResolveResponse } from "@/lib/schema"
@@ -63,6 +65,8 @@ export default function Home() {
     secretary,
     pushStatToast,
     applyEconomyDelta,
+    applyForeignDelta,
+    recomputeBlocStance,
   } = useGameStore()
 
   useTermTimer()
@@ -160,6 +164,27 @@ export default function Home() {
       )
       applyEconomyDelta(econDelta)
 
+      const currentPolicyLog = useGameStore.getState().policyLog
+      const consecutiveLosses = currentPolicyLog.slice(-2).filter((entry) => entry.result === "loss").length
+
+      const geoContext = {
+        consecutiveWins: useGameStore.getState().policyLog.filter((e) => e.result === "win").length,
+        consecutiveLosses,
+        difficulty: currentDifficulty.toUpperCase() as "EASY" | "MEDIUM" | "HARD",
+      }
+
+      const geoImpacts = realizedGeoImpact(
+        currentPolicy.id,
+        result.approved ? "approve" : "reject",
+        result.approved ? "win" : "loss",
+        geoContext,
+      )
+
+      for (const impact of geoImpacts) {
+        applyForeignDelta(impact.bloc, { score: impact.delta, reason: impact.reason })
+        recomputeBlocStance(impact.bloc)
+      }
+
       const remark = pickSecretaryRemark(deltaTotal)
       secretary.push(remark)
 
@@ -177,8 +202,8 @@ export default function Home() {
       })
 
       const currentStats = useGameStore.getState().stats
-      const currentPolicyLog = useGameStore.getState().policyLog
-      const worldEvent = generateWorldEvent(currentStats, currentPolicyLog)
+      const updatedPolicyLog = useGameStore.getState().policyLog
+      const worldEvent = generateWorldEvent(currentStats, updatedPolicyLog)
 
       if (worldEvent) {
         addWorldEvent(worldEvent.headline, worldEvent.detail, worldEvent.urgency)
@@ -276,6 +301,8 @@ export default function Home() {
           </div>
 
           <EconomySnapshot />
+
+          <ForeignOpinionsStrip />
 
           <div className="text-center">
             <p className="text-sm text-blue-300">Runs locally using Ollama (Mistral). No external LLMs.</p>
