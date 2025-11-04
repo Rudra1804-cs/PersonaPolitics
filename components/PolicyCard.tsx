@@ -2,6 +2,7 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { BusinessOpinionPanel } from "@/components/BusinessOpinionPanel"
 import { useGameStore } from "@/lib/state"
 
 interface PolicyCardProps {
@@ -80,6 +81,7 @@ export function PolicyCard({ id, title, description, difficulty, onApprove, onRe
             Reject
           </Button>
         </div>
+        <BusinessOpinionPanel policyId={id} difficulty={difficulty.toLowerCase() as "easy" | "medium" | "hard"} />
       </CardContent>
     </Card>
   )

@@ -58,6 +58,24 @@ export interface HoveredPolicy {
   difficulty: "easy" | "medium" | "hard"
 }
 
+export interface EconPoint {
+  t: number
+  gdp: number
+  infl: number
+  unemp: number
+  market: number
+  conf: number
+}
+
+export interface Economy {
+  gdp: number
+  infl: number
+  unemp: number
+  market: number
+  conf: number
+  history: EconPoint[]
+}
+
 interface GameState {
   stats: Stats
   isGameOver: boolean
@@ -78,6 +96,9 @@ interface GameState {
   clearOldStatToasts: () => void
   hoveredPolicy: HoveredPolicy | null
   setHoveredPolicy: (policy: HoveredPolicy | null) => void
+  economy: Economy
+  initEconomy: () => void
+  applyEconomyDelta: (d: { gdp?: number; infl?: number; unemp?: number; market?: number; conf?: number }) => void
   updateStats: (changes: Partial<Stats>) => void
   resetGame: () => void
   checkGameOver: () => void
@@ -89,6 +110,10 @@ interface GameState {
   addWorldEvent: (headline: string, detail: string, urgency?: "low" | "medium" | "high") => void
   removeWorldEvent: (id: string) => void
   clearWorldEvents: () => void
+}
+
+function clampEcon(val: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, val))
 }
 
 export const useGameStore = create<GameState>((set, get) => ({
@@ -140,7 +165,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       time: Date.now(),
     }
     set((state) => ({
-      statToasts: [...state.statToasts, toast].slice(-3), // Keep max 3
+      statToasts: [...state.statToasts, toast].slice(-3),
     }))
   },
   clearOldStatToasts: () => {
@@ -151,6 +176,57 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
   hoveredPolicy: null,
   setHoveredPolicy: (policy) => set({ hoveredPolicy: policy }),
+  economy: {
+    gdp: 100,
+    infl: 4.0,
+    unemp: 6.0,
+    market: 100,
+    conf: 50,
+    history: [{ t: 0, gdp: 100, infl: 4.0, unemp: 6.0, market: 100, conf: 50 }],
+  },
+  initEconomy: () => {
+    set({
+      economy: {
+        gdp: 100,
+        infl: 4.0,
+        unemp: 6.0,
+        market: 100,
+        conf: 50,
+        history: [{ t: 0, gdp: 100, infl: 4.0, unemp: 6.0, market: 100, conf: 50 }],
+      },
+    })
+  },
+  applyEconomyDelta: (d) => {
+    set((state) => {
+      const newGdp = clampEcon(state.economy.gdp + (d.gdp || 0), 70, 140)
+      const newInfl = clampEcon(state.economy.infl + (d.infl || 0), 1, 15)
+      const newUnemp = clampEcon(state.economy.unemp + (d.unemp || 0), 2, 20)
+      const newMarket = clampEcon(state.economy.market + (d.market || 0), 60, 160)
+      const newConf = clampEcon(state.economy.conf + (d.conf || 0), 0, 100)
+
+      const newPoint: EconPoint = {
+        t: state.termSecondsTotal - state.termSecondsLeft,
+        gdp: newGdp,
+        infl: newInfl,
+        unemp: newUnemp,
+        market: newMarket,
+        conf: newConf,
+      }
+
+      const newHistory = [...state.economy.history, newPoint].slice(-60)
+
+      return {
+        economy: {
+          gdp: newGdp,
+          infl: newInfl,
+          unemp: newUnemp,
+          market: newMarket,
+          conf: newConf,
+          history: newHistory,
+        },
+      }
+    })
+  },
   updateStats: (changes) => {
     if (get().termOver) return
 
@@ -181,6 +257,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
   startTerm: () => {
     set({ termStarted: true, termOver: false })
+    get().initEconomy()
   },
   tickTerm: () => {
     const state = get()
@@ -213,6 +290,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       statToasts: [],
       hoveredPolicy: null,
     })
+    get().initEconomy()
   },
   addPolicyLog: (entry) => {
     set((state) => ({

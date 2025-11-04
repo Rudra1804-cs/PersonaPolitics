@@ -13,11 +13,13 @@ import { StatToasts } from "@/components/StatToasts"
 import { WorldMapBackdrop } from "@/components/WorldMapBackdrop"
 import { CabinetMeter } from "@/components/CabinetMeter"
 import { AmbienceGauges } from "@/components/AmbienceGauges"
+import { EconomySnapshot } from "@/components/EconomySnapshot"
 import { useGameStore } from "@/lib/state"
 import { useTermTimer } from "@/hooks/useTermTimer"
 import { pickGameForPolicy } from "@/lib/games/registry"
 import { generateWorldEvent } from "@/lib/worldEvents"
 import { pickSecretaryRemark } from "@/lib/secretaryRemarks"
+import { realizedImpactFrom } from "@/lib/econHeuristics"
 import { playEventSound } from "@/lib/audio"
 import type { MiniGameDef, Difficulty, GameResult } from "@/lib/games/types"
 import type { PolicyResolveResponse } from "@/lib/schema"
@@ -60,6 +62,7 @@ export default function Home() {
     addWorldEvent,
     secretary,
     pushStatToast,
+    applyEconomyDelta,
   } = useGameStore()
 
   useTermTimer()
@@ -148,6 +151,14 @@ export default function Home() {
         p: dp !== 0 ? dp : undefined,
         s: ds !== 0 ? ds : undefined,
       })
+
+      const econDelta = realizedImpactFrom(
+        currentPolicy.id,
+        currentDifficulty,
+        result.approved ? "approve" : "reject",
+        result.approved ? "win" : "loss",
+      )
+      applyEconomyDelta(econDelta)
 
       const remark = pickSecretaryRemark(deltaTotal)
       secretary.push(remark)
@@ -240,7 +251,6 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Cabinet Meter - shows below timer on desktop */}
               <div className="hidden md:block">
                 <CabinetMeter />
               </div>
@@ -264,6 +274,8 @@ export default function Home() {
               />
             ))}
           </div>
+
+          <EconomySnapshot />
 
           <div className="text-center">
             <p className="text-sm text-blue-300">Runs locally using Ollama (Mistral). No external LLMs.</p>
