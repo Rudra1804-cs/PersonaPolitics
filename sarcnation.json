@@ -1,0 +1,191 @@
+{
+  "name": "SARC Nation (Hackathon Build)",
+  "active": false,
+  "nodes": [
+    {
+      "id": "1",
+      "name": "Webhook - Start Game",
+      "type": "n8n-nodes-base.webhook",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "sarcnation/start",
+        "responseMode": "lastNode",
+        "responseCode": 200
+      },
+      "position": [200, 200]
+    },
+    {
+      "id": "2",
+      "name": "Initialize Game State",
+      "type": "n8n-nodes-base.function",
+      "parameters": {
+        "functionCode": "return [{ json: { player: 'default', approval: 50, power: 50, standing: 50, start_time: Date.now(), duration_ms: 150000, expired: false } }];"
+      },
+      "position": [400, 200]
+    },
+    {
+      "id": "3",
+      "name": "Save GameState",
+      "type": "n8n-nodes-base.dataStore",
+      "parameters": {
+        "operation": "upsert",
+        "dataStoreName": "SARC_GameState",
+        "key": "={{$json.player}}",
+        "value": "={{$json}}"
+      },
+      "position": [600, 200]
+    },
+    {
+      "id": "4",
+      "name": "Respond - Game Started",
+      "type": "n8n-nodes-base.function",
+      "parameters": {
+        "functionCode": "const s = $json; return [{ json: { message: 'Your term begins. SARC is watching closely.', approval: s.approval, power: s.power, standing: s.standing, timer_seconds: Math.floor(s.duration_ms/1000) } }];"
+      },
+      "position": [800, 200]
+    },
+    {
+      "id": "5",
+      "name": "Webhook - Player Decision",
+      "type": "n8n-nodes-base.webhook",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "sarcnation/decision",
+        "responseMode": "lastNode",
+        "responseCode": 200
+      },
+      "position": [200, 500]
+    },
+    {
+      "id": "6",
+      "name": "Load GameState",
+      "type": "n8n-nodes-base.dataStore",
+      "parameters": {
+        "operation": "get",
+        "dataStoreName": "SARC_GameState",
+        "key": "default"
+      },
+      "position": [400, 500]
+    },
+    {
+      "id": "7",
+      "name": "Timer + Random Effects",
+      "type": "n8n-nodes-base.function",
+      "parameters": {
+        "functionCode": "const prev=$json; if(!prev) return [{ json:{ error:'No active game. Start a new term first.' } }]; const now=Date.now(); const timeLeft=prev.start_time+prev.duration_ms-now; if(timeLeft<=0){ prev.expired=true; return [{ json:{ commentary:'Your term has ended. SARC is drafting your legacy report.', expired:true, final_stats:{approval:prev.approval,power:prev.power,standing:prev.standing}, _branch:'expired', _toStore:prev } }]; } function randomEffect(){return Math.floor(Math.random()*10-5);} const updated={...prev, approval:Math.max(0,Math.min(100,prev.approval+randomEffect())), power:Math.max(0,Math.min(100,prev.power+randomEffect())), standing:Math.max(0,Math.min(100,prev.standing+randomEffect())), expired:false}; return [{ json:{...updated,time_left:timeLeft,_branch:'continue',_toStore:updated} }];"
+      },
+      "position": [600, 500]
+    },
+    {
+      "id": "8",
+      "name": "If - Expired?",
+      "type": "n8n-nodes-base.if",
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json._branch}}",
+              "operation": "equal",
+              "value2": "expired"
+            }
+          ]
+        }
+      },
+      "position": [800, 500]
+    },
+    {
+      "id": "9",
+      "name": "Save Expired State",
+      "type": "n8n-nodes-base.dataStore",
+      "parameters": {
+        "operation": "upsert",
+        "dataStoreName": "SARC_GameState",
+        "key": "default",
+        "value": "={{$json._toStore}}"
+      },
+      "position": [1000, 380]
+    },
+    {
+      "id": "10",
+      "name": "End of Term Summary",
+      "type": "n8n-nodes-base.function",
+      "parameters": {
+        "functionCode": "const s=$json; return [{ json:{ commentary:s.commentary||'Your legacy: one long committee meeting.', expired:true, final_stats:s.final_stats, end_summary:'SARC Nation thanks you for your questionable leadership.' } }];"
+      },
+      "position": [1200, 380]
+    },
+    {
+      "id": "11",
+      "name": "Save Updated State",
+      "type": "n8n-nodes-base.dataStore",
+      "parameters": {
+        "operation": "upsert",
+        "dataStoreName": "SARC_GameState",
+        "key": "default",
+        "value": "={{$json._toStore}}"
+      },
+      "position": [1000, 600]
+    },
+    {
+      "id": "12",
+      "name": "Build Ollama Prompt",
+      "type": "n8n-nodes-base.function",
+      "parameters": {
+        "functionCode": "const s=$json; const secondsLeft=Math.floor((s.time_left||0)/1000); const prompt=`You are S.A.R.C. — the Sarcastic Advisor for Rational Control — a digital secretary with sharp wit, dry humor, and political insight.\\n\\nThe player is the leader of a nation, making political decisions on economy, diplomacy, law, and social policy.\\n\\nRespond sarcastically to the latest decision, and describe the next political event. Return only valid JSON with this format:\\n{\\n  \\\"commentary\\\": \\\"sarcastic remark\\\",\\n  \\\"next_event\\\": \\\"headline of next political crisis\\\",\\n  \\\"options\\\": [\\n    {\\\"text\\\": \\\"Option A\\\", \\\"effects\\\": {\\\"approval\\\": +5, \\\"power\\\": -3, \\\"standing\\\": +1}},\\n    {\\\"text\\\": \\\"Option B\\\", \\\"effects\\\": {\\\"approval\\\": -4, \\\"power\\\": +6, \\\"standing\\\": 0}}\\n  ]\\n}\\n\\nApproval:${s.approval}\\nPower:${s.power}\\nStanding:${s.standing}\\nTime Remaining:${secondsLeft}s\\nLast Decision:${s.decision}`; return [{ json:{ model:'mistral:latest', prompt, approval:s.approval, power:s.power, standing:s.standing, time_left:s.time_left } }];"
+      },
+      "position": [1200, 600]
+    },
+    {
+      "id": "13",
+      "name": "Ollama Generate",
+      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "requestMethod": "POST",
+        "url": "http://127.0.0.1:11434/api/generate",
+        "jsonParameters": true,
+        "responseFormat": "json",
+        "bodyParametersJson": "{ \"model\": \"={{$json.model}}\", \"prompt\": \"={{$json.prompt}}\", \"stream\": false, \"temperature\": 0.7 }"
+      },
+      "position": [1400, 600]
+    },
+    {
+      "id": "14",
+      "name": "Parse Ollama Response",
+      "type": "n8n-nodes-base.function",
+      "parameters": {
+        "functionCode": "const raw=$json.response||$json.text||JSON.stringify($json); let parsed=null; const match=raw.match(/\\{[\\s\\S]*\\}/); if(match){try{parsed=JSON.parse(match[0]);}catch(e){}} if(!parsed){parsed={commentary:'SARC had a diplomatic meltdown.',next_event:'Cabinet resigns in confusion.',options:[]};} return [{ json:{ ...parsed, approval:$prevNode['Build Ollama Prompt'].json.approval, power:$prevNode['Build Ollama Prompt'].json.power, standing:$prevNode['Build Ollama Prompt'].json.standing, time_left:$prevNode['Build Ollama Prompt'].json.time_left, expired:false } }];"
+      },
+      "position": [1600, 600]
+    },
+    {
+      "id": "15",
+      "name": "Respond - Next Scenario",
+      "type": "n8n-nodes-base.function",
+      "parameters": {
+        "functionCode": "const s=$json; return [{ json:{ commentary:s.commentary, next_event:s.next_event, options:s.options, stats:{ approval:s.approval, power:s.power, standing:s.standing }, time_left:s.time_left, expired:false } }];"
+      },
+      "position": [1800, 600]
+    }
+  ],
+  "connections": {
+    "Webhook - Start Game": { "main": [ [ { "node": "Initialize Game State", "type": "main", "index": 0 } ] ] },
+    "Initialize Game State": { "main": [ [ { "node": "Save GameState", "type": "main", "index": 0 } ] ] },
+    "Save GameState": { "main": [ [ { "node": "Respond - Game Started", "type": "main", "index": 0 } ] ] },
+    "Webhook - Player Decision": { "main": [ [ { "node": "Load GameState", "type": "main", "index": 0 } ] ] },
+    "Load GameState": { "main": [ [ { "node": "Timer + Random Effects", "type": "main", "index": 0 } ] ] },
+    "Timer + Random Effects": { "main": [ [ { "node": "If - Expired?", "type": "main", "index": 0 } ] ] },
+    "If - Expired?": {
+      "main": [
+        [ { "node": "Save Expired State", "type": "main", "index": 0 } ],
+        [ { "node": "Save Updated State", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Save Expired State": { "main": [ [ { "node": "End of Term Summary", "type": "main", "index": 0 } ] ] },
+    "Save Updated State": { "main": [ [ { "node": "Build Ollama Prompt", "type": "main", "index": 0 } ] ] },
+    "Build Ollama Prompt": { "main": [ [ { "node": "Ollama Generate", "type": "main", "index": 0 } ] ] },
+    "Ollama Generate": { "main": [ [ { "node": "Parse Ollama Response", "type": "main", "index": 0 } ] ] },
+    "Parse Ollama Response": { "main": [ [ { "node": "Respond - Next Scenario", "type": "main", "index": 0 } ] ] }
+  },
+  "settings": {},
+  "versionId": "sarcnation-hackathon-v2"
+}
