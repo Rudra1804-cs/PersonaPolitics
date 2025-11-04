@@ -314,22 +314,20 @@ export default function Home() {
       <WorldMapBackdrop />
 
       <div
-        className={`min-h-screen relative z-10 p-4 md:p-8 transition-all duration-500 ${
+        className={`min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 p-4 md:p-8 transition-all duration-500 ${
           shouldDimBackground ? "brightness-75" : ""
         }`}
       >
         <div className="mx-auto max-w-7xl space-y-8 lg:mr-96">
           <div className="text-center space-y-2">
-            <h1 className="text-4xl md:text-5xl font-bold text-white text-balance drop-shadow-2xl">
-              Persona Politics – Local Edition
-            </h1>
-            <p className="text-lg text-blue-200 text-pretty drop-shadow-lg">
+            <h1 className="text-4xl md:text-5xl font-bold text-white text-balance">Persona Politics – Local Edition</h1>
+            <p className="text-lg text-blue-200 text-pretty">
               You are the President. Make policy choices, win challenges, and manage your stats.
             </p>
           </div>
 
           <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
-            <div className="w-full space-y-4 rounded-xl bg-slate-800/30 backdrop-blur-2xl p-6 border border-cyan-500/30 shadow-2xl shadow-cyan-500/20 md:w-80 ring-1 ring-white/5">
+            <div className="w-full space-y-4 rounded-xl bg-slate-800/50 p-6 backdrop-blur md:w-80">
               <h2 className="text-xl font-bold text-white">Presidential Stats</h2>
               <StatsBar label="Approval" value={stats.approval} />
               <StatsBar label="Power" value={stats.power} />
@@ -341,7 +339,7 @@ export default function Home() {
             </div>
 
             <div className="space-y-4">
-              <div className="rounded-xl bg-slate-800/30 backdrop-blur-2xl p-4 border border-cyan-500/30 shadow-2xl shadow-cyan-500/20 ring-1 ring-white/5">
+              <div className="rounded-xl bg-slate-800/50 p-4 backdrop-blur">
                 <div className="text-center space-y-2">
                   <p className="text-sm text-blue-200">Time Remaining</p>
                   <p

@@ -23,7 +23,7 @@ export function PrecisionModal({ isOpen, onClose, onComplete, difficulty }: Prec
   const animationRef = useRef<number>()
   const trackRef = useRef<HTMLDivElement>(null)
 
-  const maxRounds = 4
+  const maxRounds = 2
   const maxMisses = 2
 
   // Difficulty settings
