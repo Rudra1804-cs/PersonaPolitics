@@ -1,7 +1,8 @@
 import type { MiniGameDef, Difficulty } from "./types"
 import { PrecisionSlider } from "@/components/games/PrecisionSlider"
 import { TargetClicker } from "@/components/games/TargetClicker"
-import { MemorySequence } from "@/components/games/MemorySequence"
+import { SpaceShooter } from "@/components/games/SpaceShooter"
+import { TicTacToe } from "@/components/games/TicTacToe"
 
 export const GAME_REGISTRY: MiniGameDef[] = [
   {
@@ -25,13 +26,23 @@ export const GAME_REGISTRY: MiniGameDef[] = [
     },
   },
   {
-    id: "memory-sequence",
-    label: "Memory Sequence",
-    Component: MemorySequence,
+    id: "space-shooter",
+    label: "Space Defense",
+    Component: SpaceShooter,
     defaults: {
-      easy: { startLength: 3, flashDuration: 800 },
-      medium: { startLength: 3, flashDuration: 600 },
-      hard: { startLength: 4, flashDuration: 500 },
+      easy: { speedMultiplier: 0.8, spawnMultiplier: 1.2, targetScore: 100 },
+      medium: { speedMultiplier: 1.0, spawnMultiplier: 1.0, targetScore: 150 },
+      hard: { speedMultiplier: 1.3, spawnMultiplier: 0.8, targetScore: 200 },
+    },
+  },
+  {
+    id: "tic-tac-toe",
+    label: "Strategic Challenge",
+    Component: TicTacToe,
+    defaults: {
+      easy: { aiDifficulty: 0.3 },
+      medium: { aiDifficulty: 0.6 },
+      hard: { aiDifficulty: 0.9 },
     },
   },
 ]

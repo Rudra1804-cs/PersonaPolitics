@@ -171,7 +171,7 @@ function BlocCard({ bloc, opinion, termOver }: BlocCardProps) {
             animate={{ scale: 1 }}
             className={`text-[10px] font-bold ${colors.text}`}
           >
-            {opinion.score}
+            {opinion.score.toFixed(2)}
           </motion.span>
         </div>
 

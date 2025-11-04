@@ -16,7 +16,11 @@ import { AmbienceGauges } from "@/components/AmbienceGauges"
 import { EconomySnapshot } from "@/components/EconomySnapshot"
 import { ForeignOpinionsStrip } from "@/components/ForeignOpinionsStrip"
 import { ExitPollPanel } from "@/components/ExitPollPanel"
-import { pollShift, pollTimeDrift } from "@/lib/pollHeuristics"
+import { CabinetLoyaltyPanel } from "@/components/CabinetLoyaltyPanel"
+import { CabinetShuffleModal } from "@/components/CabinetShuffleModal"
+import { LegacyMeter } from "@/components/LegacyMeter"
+import { pollTimeDrift } from "@/lib/pollHeuristics"
+import { cabinetDeltas } from "@/lib/cabinetHeuristics"
 import { useGameStore } from "@/lib/state"
 import { useTermTimer } from "@/hooks/useTermTimer"
 import { pickGameForPolicy } from "@/lib/games/registry"
@@ -71,6 +75,12 @@ export default function Home() {
     recomputeBlocStance,
     applyExitPollDelta,
     initExitPoll,
+    bumpLoyalty,
+    maybeResign,
+    computeLegacyIndex,
+    saveLegacyIfBest,
+    economy,
+    isHeadlineUsed,
   } = useGameStore()
 
   useTermTimer()
@@ -79,6 +89,7 @@ export default function Home() {
   const [currentPolicy, setCurrentPolicy] = useState<{ id: string; title: string } | null>(null)
   const [currentDifficulty, setCurrentDifficulty] = useState<Difficulty>("hard")
   const [selectedGame, setSelectedGame] = useState<MiniGameDef | null>(null)
+  const [intendedAction, setIntendedAction] = useState<"approve" | "reject">("approve")
 
   const worldEvents = useGameStore((state) => state.worldEvents)
   const highUrgencyCount = worldEvents.filter((e) => e.urgency === "high").length
@@ -90,7 +101,12 @@ export default function Home() {
     return `${mins}:${secs.toString().padStart(2, "0")}`
   }
 
-  const handlePolicyClick = (policyId: string, policyTitle: string, difficulty: Difficulty) => {
+  const handlePolicyClick = (
+    policyId: string,
+    policyTitle: string,
+    difficulty: Difficulty,
+    action: "approve" | "reject",
+  ) => {
     if (termOver) {
       console.log("[v0] Cannot start policy - term is over")
       return
@@ -102,6 +118,7 @@ export default function Home() {
 
     setCurrentPolicy({ id: policyId, title: policyTitle })
     setCurrentDifficulty(difficulty)
+    setIntendedAction(action)
 
     const game = pickGameForPolicy(policyId, difficulty)
     setSelectedGame(game)
@@ -119,6 +136,8 @@ export default function Home() {
 
     if (!currentPolicy) return
 
+    const finalApproved = intendedAction === "approve" ? result.approved : !result.approved
+
     try {
       const response = await fetch("/api/policy/resolve", {
         method: "POST",
@@ -126,7 +145,7 @@ export default function Home() {
         body: JSON.stringify({
           policyId: currentPolicy.id,
           difficulty: currentDifficulty,
-          approved: result.approved,
+          approved: finalApproved,
           misses: result.misses,
           rounds: result.rounds,
         }),
@@ -163,7 +182,7 @@ export default function Home() {
       const econDelta = realizedImpactFrom(
         currentPolicy.id,
         currentDifficulty,
-        result.approved ? "approve" : "reject",
+        finalApproved ? "approve" : "reject",
         result.approved ? "win" : "loss",
       )
       applyEconomyDelta(econDelta)
@@ -179,7 +198,7 @@ export default function Home() {
 
       const geoImpacts = realizedGeoImpact(
         currentPolicy.id,
-        result.approved ? "approve" : "reject",
+        finalApproved ? "approve" : "reject",
         result.approved ? "win" : "loss",
         geoContext,
       )
@@ -189,24 +208,25 @@ export default function Home() {
         recomputeBlocStance(impact.bloc)
       }
 
-      const currentStats = useGameStore.getState().stats
-      const currentEconomy = useGameStore.getState().economy
-      const pollContext = {
-        approval: currentStats.approval,
-        power: currentStats.power,
-        standing: currentStats.standing,
-        economy: {
-          gdp: currentEconomy.gdp,
-          infl: currentEconomy.infl,
-          unemp: currentEconomy.unemp,
-          conf: currentEconomy.conf,
-        },
-        policyId: currentPolicy.id,
-        decision: result.approved ? ("approve" as const) : ("reject" as const),
-        result: result.approved ? ("win" as const) : ("loss" as const),
-        difficulty: currentDifficulty.toUpperCase() as "EASY" | "MEDIUM" | "HARD",
+      const updatedPolicyLog = useGameStore.getState().policyLog
+      const defenseApprovalsInRow = updatedPolicyLog
+        .slice(-3)
+        .filter((e) => e.id === "military" && e.decision === "approve").length
+
+      const cabDeltas = cabinetDeltas(
+        currentPolicy.id,
+        finalApproved ? "approve" : "reject",
+        result.approved ? "win" : "loss",
+        { defenseApprovalsInRow },
+      )
+
+      for (const cd of cabDeltas) {
+        bumpLoyalty(cd.key, cd.delta, cd.reason)
       }
-      applyExitPollDelta(pollShift(pollContext))
+
+      for (const cd of cabDeltas) {
+        maybeResign(cd.key)
+      }
 
       const remark = pickSecretaryRemark(deltaTotal)
       secretary.push(remark)
@@ -214,7 +234,7 @@ export default function Home() {
       addPolicyLog({
         id: currentPolicy.id,
         title: currentPolicy.title,
-        decision: result.approved ? "approve" : "reject",
+        decision: finalApproved ? "approve" : "reject",
         result: result.approved ? "win" : "loss",
         delta: {
           approval: da,
@@ -224,8 +244,8 @@ export default function Home() {
         time: termSecondsTotal - termSecondsLeft,
       })
 
-      const updatedPolicyLog = useGameStore.getState().policyLog
-      const worldEvent = generateWorldEvent(currentStats, updatedPolicyLog)
+      const finalPolicyLog = useGameStore.getState().policyLog
+      const worldEvent = generateWorldEvent(stats, finalPolicyLog, isHeadlineUsed)
 
       if (worldEvent) {
         addWorldEvent(worldEvent.headline, worldEvent.detail, worldEvent.urgency)
@@ -241,7 +261,7 @@ export default function Home() {
         .join(", ")
 
       showToast({
-        title: result.approved ? "Policy Approved" : "Policy Rejected",
+        title: finalApproved ? "Policy Approved" : "Policy Rejected",
         description: statChanges || "No change",
         details: data.advisor_comment,
       })
@@ -267,25 +287,49 @@ export default function Home() {
     return () => clearInterval(id)
   }, [termStarted, termOver, applyExitPollDelta])
 
+  useEffect(() => {
+    if (termOver && termStarted) {
+      const index = computeLegacyIndex({
+        approval: stats.approval,
+        power: stats.power,
+        standing: stats.standing,
+        economy: { gdp: economy.gdp, unemp: economy.unemp },
+      })
+
+      const title =
+        index >= 85
+          ? "Visionary Leader"
+          : index >= 70
+            ? "Respected Statesman"
+            : index >= 50
+              ? "Pragmatic Politician"
+              : "Disgraced Official"
+
+      saveLegacyIfBest(index, title)
+    }
+  }, [termOver, termStarted, stats, economy, computeLegacyIndex, saveLegacyIfBest])
+
   return (
     <>
       <WorldMapBackdrop />
 
       <div
-        className={`min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 p-4 md:p-8 transition-all duration-500 ${
+        className={`min-h-screen relative z-10 p-4 md:p-8 transition-all duration-500 ${
           shouldDimBackground ? "brightness-75" : ""
         }`}
       >
         <div className="mx-auto max-w-7xl space-y-8 lg:mr-96">
           <div className="text-center space-y-2">
-            <h1 className="text-4xl md:text-5xl font-bold text-white text-balance">Persona Politics – Local Edition</h1>
-            <p className="text-lg text-blue-200 text-pretty">
+            <h1 className="text-4xl md:text-5xl font-bold text-white text-balance drop-shadow-2xl">
+              Persona Politics – Local Edition
+            </h1>
+            <p className="text-lg text-blue-200 text-pretty drop-shadow-lg">
               You are the President. Make policy choices, win challenges, and manage your stats.
             </p>
           </div>
 
           <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
-            <div className="w-full space-y-4 rounded-xl bg-slate-800/50 p-6 backdrop-blur md:w-80">
+            <div className="w-full space-y-4 rounded-xl bg-slate-800/30 backdrop-blur-2xl p-6 border border-cyan-500/30 shadow-2xl shadow-cyan-500/20 md:w-80 ring-1 ring-white/5">
               <h2 className="text-xl font-bold text-white">Presidential Stats</h2>
               <StatsBar label="Approval" value={stats.approval} />
               <StatsBar label="Power" value={stats.power} />
@@ -297,7 +341,7 @@ export default function Home() {
             </div>
 
             <div className="space-y-4">
-              <div className="rounded-xl bg-slate-800/50 p-4 backdrop-blur">
+              <div className="rounded-xl bg-slate-800/30 backdrop-blur-2xl p-4 border border-cyan-500/30 shadow-2xl shadow-cyan-500/20 ring-1 ring-white/5">
                 <div className="text-center space-y-2">
                   <p className="text-sm text-blue-200">Time Remaining</p>
                   <p
@@ -329,8 +373,8 @@ export default function Home() {
                 title={policy.title}
                 description={policy.description}
                 difficulty={policy.difficulty.toUpperCase() as "EASY" | "MEDIUM" | "HARD"}
-                onApprove={() => handlePolicyClick(policy.id, policy.title, policy.difficulty)}
-                onReject={() => handlePolicyClick(policy.id, policy.title, policy.difficulty)}
+                onApprove={() => handlePolicyClick(policy.id, policy.title, policy.difficulty, "approve")}
+                onReject={() => handlePolicyClick(policy.id, policy.title, policy.difficulty, "reject")}
               />
             ))}
           </div>
@@ -340,6 +384,10 @@ export default function Home() {
           <ForeignOpinionsStrip />
 
           <ExitPollPanel />
+
+          <CabinetLoyaltyPanel />
+
+          <LegacyMeter />
 
           <div className="text-center">
             <p className="text-sm text-blue-300">Runs locally using Ollama (Mistral). No external LLMs.</p>
@@ -366,6 +414,8 @@ export default function Home() {
       <EndOfTermModal />
 
       <ToastContainer />
+
+      <CabinetShuffleModal />
     </>
   )
 }

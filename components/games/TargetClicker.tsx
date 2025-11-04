@@ -15,7 +15,7 @@ export function TargetClicker({ difficulty, onComplete }: MiniGameProps) {
   const timerRef = useRef<NodeJS.Timeout>()
   const startTimeRef = useRef<number>(Date.now())
 
-  const maxRounds = 4
+  const maxRounds = 2
   const maxMisses = 2
 
   const getSettings = () => {

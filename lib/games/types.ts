@@ -13,7 +13,7 @@ export interface MiniGameProps {
 }
 
 export interface MiniGameDef {
-  id: "precision" | "target-click" | "memory-sequence"
+  id: "precision" | "target-click" | "space-shooter" | "tic-tac-toe" | "fruit-slicer"
   label: string
   Component: React.FC<MiniGameProps>
   defaults?: Record<Difficulty, Record<string, number>>

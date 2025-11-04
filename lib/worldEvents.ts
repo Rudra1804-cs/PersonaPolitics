@@ -235,6 +235,7 @@ export const EVENT_TRIGGERS: EventTrigger[] = [
 export function generateWorldEvent(
   stats: Stats,
   policyLog: PolicyLogEntry[],
+  isHeadlineUsed?: (headline: string) => boolean,
 ): {
   headline: string
   detail: string
@@ -248,8 +249,13 @@ export function generateWorldEvent(
   // Pick a random matching trigger
   const trigger = matchingTriggers[Math.floor(Math.random() * matchingTriggers.length)]
 
+  const availableHeadlines = isHeadlineUsed ? trigger.headlines.filter((h) => !isHeadlineUsed(h)) : trigger.headlines
+
+  // If all headlines have been used, reset and use all headlines
+  const headlinesToUse = availableHeadlines.length > 0 ? availableHeadlines : trigger.headlines
+
   // Pick random headline and detail
-  const headline = trigger.headlines[Math.floor(Math.random() * trigger.headlines.length)]
+  const headline = headlinesToUse[Math.floor(Math.random() * headlinesToUse.length)]
   const detail = trigger.details[Math.floor(Math.random() * trigger.details.length)]
 
   return {

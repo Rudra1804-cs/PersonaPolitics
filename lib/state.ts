@@ -35,6 +35,11 @@ export interface WorldEvent {
   time: number
 }
 
+export interface UsedHeadlines {
+  headlines: string[]
+  maxHistory: number
+}
+
 export type RemarkTone = "surprised" | "proud" | "neutral" | "concerned" | "roast"
 
 export interface SecretaryRemark {
@@ -107,6 +112,22 @@ export interface ExitPoll {
   }
 }
 
+export type MinisterKey = "defense" | "finance" | "justice" | "foreign"
+
+export interface Minister {
+  name: string
+  loyalty: number
+  trend: number[]
+  status: "active" | "resigned"
+  lastReason?: string
+}
+
+export interface Legacy {
+  bestIndex: number
+  bestTitle: "Visionary Leader" | "Respected Statesman" | "Pragmatic Politician" | "Disgraced Official" | null
+  history: Array<{ t: number; index: number }>
+}
+
 interface GameState {
   stats: Stats
   isGameOver: boolean
@@ -117,6 +138,7 @@ interface GameState {
   termOver: boolean
   policyLog: PolicyLogEntry[]
   worldEvents: WorldEvent[]
+  usedHeadlines: UsedHeadlines
   secretary: {
     queue: SecretaryRemark[]
     push: (r: { text: string; tone: RemarkTone }) => void
@@ -147,6 +169,22 @@ interface GameState {
       overall: number
     }>,
   ) => void
+  cabinet: Record<MinisterKey, Minister>
+  initCabinet: () => void
+  bumpLoyalty: (k: MinisterKey, delta: number, reason?: string) => void
+  maybeResign: (k: MinisterKey) => void
+  shuffleCabinet: () => void
+  cabinetShuffleModal: { open: boolean; ministerName: string; ministerKey: MinisterKey } | null
+  openCabinetShuffleModal: (ministerName: string, ministerKey: MinisterKey) => void
+  closeCabinetShuffleModal: () => void
+  legacy: Legacy
+  computeLegacyIndex: (ctx: {
+    approval: number
+    power: number
+    standing: number
+    economy: { gdp: number; unemp: number }
+  }) => number
+  saveLegacyIfBest: (index: number, title: Legacy["bestTitle"]) => void
   updateStats: (changes: Partial<Stats>) => void
   resetGame: () => void
   checkGameOver: () => void
@@ -158,10 +196,26 @@ interface GameState {
   addWorldEvent: (headline: string, detail: string, urgency?: "low" | "medium" | "high") => void
   removeWorldEvent: (id: string) => void
   clearWorldEvents: () => void
+  markHeadlineUsed: (headline: string) => void
+  isHeadlineUsed: (headline: string) => boolean
 }
 
 function clampEcon(val: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, val))
+}
+
+function loadLegacyFromStorage(): { bestIndex: number; bestTitle: Legacy["bestTitle"] } {
+  if (typeof window === "undefined") return { bestIndex: 0, bestTitle: null }
+  try {
+    const stored = localStorage.getItem("pp_legacy_best")
+    if (stored) {
+      const parsed = JSON.parse(stored)
+      return { bestIndex: parsed.bestIndex || 0, bestTitle: parsed.bestTitle || null }
+    }
+  } catch (e) {
+    console.error("[v0] Failed to load legacy from localStorage:", e)
+  }
+  return { bestIndex: 0, bestTitle: null }
 }
 
 export const useGameStore = create<GameState>((set, get) => ({
@@ -172,12 +226,16 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
   isGameOver: false,
   gameResult: null,
-  termSecondsTotal: 150,
-  termSecondsLeft: 150,
+  termSecondsTotal: 120,
+  termSecondsLeft: 120,
   termStarted: false,
   termOver: false,
   policyLog: [],
   worldEvents: [],
+  usedHeadlines: {
+    headlines: [],
+    maxHistory: 15, // Track last 15 headlines to prevent repetition
+  },
   secretary: {
     queue: [],
     push: (r) => {
@@ -480,6 +538,127 @@ export const useGameStore = create<GameState>((set, get) => ({
       return { exitPoll: newPoll }
     })
   },
+  cabinet: {
+    defense: { name: "Sec. R. Hayes", loyalty: 60, trend: [60], status: "active" },
+    finance: { name: "Min. V. Patel", loyalty: 60, trend: [60], status: "active" },
+    justice: { name: "AG L. Romero", loyalty: 60, trend: [60], status: "active" },
+    foreign: { name: "FM A. Chen", loyalty: 60, trend: [60], status: "active" },
+  },
+  initCabinet: () => {
+    set({
+      cabinet: {
+        defense: { name: "Sec. R. Hayes", loyalty: 60, trend: [60], status: "active" },
+        finance: { name: "Min. V. Patel", loyalty: 60, trend: [60], status: "active" },
+        justice: { name: "AG L. Romero", loyalty: 60, trend: [60], status: "active" },
+        foreign: { name: "FM A. Chen", loyalty: 60, trend: [60], status: "active" },
+      },
+    })
+  },
+  bumpLoyalty: (k, delta, reason) => {
+    set((state) => {
+      const minister = state.cabinet[k]
+      const newLoyalty = Math.max(0, Math.min(100, minister.loyalty + delta))
+      const newTrend = [...minister.trend, newLoyalty].slice(-40)
+
+      return {
+        cabinet: {
+          ...state.cabinet,
+          [k]: {
+            ...minister,
+            loyalty: newLoyalty,
+            trend: newTrend,
+            lastReason: reason || minister.lastReason,
+          },
+        },
+      }
+    })
+  },
+  maybeResign: (k) => {
+    const minister = get().cabinet[k]
+    if (minister.loyalty < 40 && minister.status === "active") {
+      set((state) => ({
+        cabinet: {
+          ...state.cabinet,
+          [k]: {
+            ...minister,
+            status: "resigned",
+          },
+        },
+      }))
+      get().openCabinetShuffleModal(minister.name, k)
+    }
+  },
+  shuffleCabinet: () => {
+    const modalState = get().cabinetShuffleModal
+    if (!modalState) return
+
+    const k = modalState.ministerKey
+    const newLoyalty = 58 + Math.floor(Math.random() * 8)
+
+    set((state) => ({
+      cabinet: {
+        ...state.cabinet,
+        [k]: {
+          ...state.cabinet[k],
+          loyalty: newLoyalty,
+          trend: [...state.cabinet[k].trend, newLoyalty].slice(-40),
+          status: "active",
+          lastReason: "New appointee",
+        },
+      },
+    }))
+
+    get().closeCabinetShuffleModal()
+  },
+  cabinetShuffleModal: null,
+  openCabinetShuffleModal: (ministerName, ministerKey) => {
+    set({ cabinetShuffleModal: { open: true, ministerName, ministerKey } })
+  },
+  closeCabinetShuffleModal: () => {
+    set({ cabinetShuffleModal: null })
+  },
+  legacy: {
+    ...loadLegacyFromStorage(),
+    history: [],
+  },
+  computeLegacyIndex: (ctx) => {
+    const avgStats = (ctx.approval + ctx.power + ctx.standing) / 3
+    const gdpBonus = ((ctx.economy.gdp - 70) / (140 - 70)) * 40
+    const unempPenalty = ((ctx.economy.unemp - 2) / (20 - 2)) * 20
+    const index = avgStats * 0.6 + gdpBonus - unempPenalty
+    return Math.max(0, Math.min(100, index))
+  },
+  saveLegacyIfBest: (index, title) => {
+    const state = get()
+    const currentTime = state.termSecondsTotal - state.termSecondsLeft
+
+    const newHistory = [...state.legacy.history, { t: currentTime, index }].slice(-40)
+
+    if (index > state.legacy.bestIndex) {
+      set({
+        legacy: {
+          bestIndex: index,
+          bestTitle: title,
+          history: newHistory,
+        },
+      })
+
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.setItem("pp_legacy_best", JSON.stringify({ bestIndex: index, bestTitle: title }))
+        } catch (e) {
+          console.error("[v0] Failed to save legacy to localStorage:", e)
+        }
+      }
+    } else {
+      set({
+        legacy: {
+          ...state.legacy,
+          history: newHistory,
+        },
+      })
+    }
+  },
   updateStats: (changes) => {
     if (get().termOver) return
 
@@ -513,6 +692,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     get().initEconomy()
     get().initForeignOpinions()
     get().initExitPoll()
+    get().initCabinet()
   },
   tickTerm: () => {
     const state = get()
@@ -530,7 +710,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
   resetTerm: () => {
     set({
-      termSecondsLeft: 150,
+      termSecondsLeft: 120,
       termStarted: false,
       termOver: false,
       policyLog: [],
@@ -583,6 +763,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     get().initEconomy()
     get().initForeignOpinions()
     get().initExitPoll()
+    get().initCabinet()
   },
   addPolicyLog: (entry) => {
     set((state) => ({
@@ -600,6 +781,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     set((state) => ({
       worldEvents: [...state.worldEvents, event],
     }))
+    get().markHeadlineUsed(headline)
   },
   removeWorldEvent: (id) => {
     set((state) => ({
@@ -608,5 +790,19 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
   clearWorldEvents: () => {
     set({ worldEvents: [] })
+  },
+  markHeadlineUsed: (headline) => {
+    set((state) => {
+      const newHeadlines = [...state.usedHeadlines.headlines, headline].slice(-state.usedHeadlines.maxHistory)
+      return {
+        usedHeadlines: {
+          ...state.usedHeadlines,
+          headlines: newHeadlines,
+        },
+      }
+    })
+  },
+  isHeadlineUsed: (headline) => {
+    return get().usedHeadlines.headlines.includes(headline)
   },
 }))

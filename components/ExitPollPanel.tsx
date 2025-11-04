@@ -381,7 +381,7 @@ function SimpleBar({ label, value, color = "blue" }: SimpleBarProps) {
           animate={{ scale: 1 }}
           className={`text-sm font-bold ${textColor}`}
         >
-          {value}%
+          {value.toFixed(2)}%
         </motion.span>
       </div>
       <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">

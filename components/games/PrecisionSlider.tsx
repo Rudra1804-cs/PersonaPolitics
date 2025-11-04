@@ -15,7 +15,7 @@ export function PrecisionSlider({ difficulty, onComplete }: MiniGameProps) {
   const directionRef = useRef(1)
   const animationRef = useRef<number>()
 
-  const maxRounds = 4
+  const maxRounds = 2
   const maxMisses = 2
 
   // Difficulty settings
