@@ -12,6 +12,7 @@ import { SecretaryBubble } from "@/components/SecretaryBubble"
 import { StatToasts } from "@/components/StatToasts"
 import { WorldMapBackdrop } from "@/components/WorldMapBackdrop"
 import { CabinetMeter } from "@/components/CabinetMeter"
+import { AmbienceGauges } from "@/components/AmbienceGauges"
 import { useGameStore } from "@/lib/state"
 import { useTermTimer } from "@/hooks/useTermTimer"
 import { pickGameForPolicy } from "@/lib/games/registry"
@@ -218,6 +219,10 @@ export default function Home() {
               <StatsBar label="Approval" value={stats.approval} />
               <StatsBar label="Power" value={stats.power} />
               <StatsBar label="Standing" value={stats.standing} />
+
+              <div className="pt-4 border-t border-slate-700/50">
+                <AmbienceGauges />
+              </div>
             </div>
 
             <div className="space-y-4">
