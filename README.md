@@ -2,6 +2,8 @@
 
 A presidential simulation game where you make policy decisions, complete precision challenges, and manage your approval, power, and standing stats. Powered entirely by local Ollama AI (Mistral) with no cloud dependencies.
 
+https://v0-remix-of-persona-politics-game.vercel.app
+
 ## Features
 
 - **Presidential Stats Management**: Track Approval, Power, and Standing (0-100)
