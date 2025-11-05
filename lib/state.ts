@@ -27,6 +27,14 @@ export interface PolicyLogEntry {
   time: number
 }
 
+export interface CurrentCard {
+  id: string
+  title: string
+  description: string
+  difficulty: "easy" | "medium" | "hard"
+  type: "economic" | "defense" | "social" | "diplomatic"
+}
+
 export interface WorldEvent {
   id: string
   headline: string
@@ -137,6 +145,13 @@ interface GameState {
   termStarted: boolean
   termOver: boolean
   policyLog: PolicyLogEntry[]
+  currentCards: CurrentCard[]
+  usedCardIds: string[]
+  cardExiting: string | null
+  setCurrentCards: (cards: CurrentCard[]) => void
+  replaceCard: (oldCardId: string, newCard: CurrentCard) => void
+  markCardAsExiting: (cardId: string) => void
+  clearExitingCard: () => void
   worldEvents: WorldEvent[]
   usedHeadlines: UsedHeadlines
   secretary: {
@@ -231,6 +246,18 @@ export const useGameStore = create<GameState>((set, get) => ({
   termStarted: false,
   termOver: false,
   policyLog: [],
+  currentCards: [],
+  usedCardIds: [],
+  cardExiting: null,
+  setCurrentCards: (cards) => set({ currentCards: cards }),
+  replaceCard: (oldCardId, newCard) => {
+    set((state) => ({
+      currentCards: state.currentCards.map((card) => (card.id === oldCardId ? newCard : card)),
+      usedCardIds: [...state.usedCardIds, oldCardId],
+    }))
+  },
+  markCardAsExiting: (cardId) => set({ cardExiting: cardId }),
+  clearExitingCard: () => set({ cardExiting: null }),
   worldEvents: [],
   usedHeadlines: {
     headlines: [],
@@ -715,6 +742,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       termOver: false,
       policyLog: [],
       worldEvents: [],
+      currentCards: [],
+      usedCardIds: [],
+      cardExiting: null,
       stats: { approval: 50, power: 50, standing: 50 },
       isGameOver: false,
       gameResult: null,

@@ -29,31 +29,11 @@ import { pickSecretaryRemark } from "@/lib/secretaryRemarks"
 import { realizedImpactFrom } from "@/lib/econHeuristics"
 import { realizedGeoImpact } from "@/lib/geoHeuristics"
 import { playEventSound } from "@/lib/audio"
+import { getInitialCards, getNextCard } from "@/lib/policyPool"
 import type { MiniGameDef, Difficulty, GameResult } from "@/lib/games/types"
 import type { PolicyResolveResponse } from "@/lib/schema"
 
-const POLICIES = [
-  {
-    id: "infrastructure",
-    title: "Infrastructure Deal",
-    description: "A massive $2 trillion investment in roads, bridges, and public transit.",
-    difficulty: "hard" as Difficulty,
-  },
-  {
-    id: "military",
-    title: "Military Spending",
-    description: "Increase defense budget by 15% to modernize armed forces.",
-    difficulty: "hard" as Difficulty,
-  },
-  {
-    id: "justice",
-    title: "Criminal Justice Reform",
-    description: "Comprehensive reform including sentencing guidelines and police accountability.",
-    difficulty: "hard" as Difficulty,
-  },
-]
-
-export default function Home() {
+const Home = () => {
   const {
     stats,
     isGameOver,
@@ -81,6 +61,12 @@ export default function Home() {
     saveLegacyIfBest,
     economy,
     isHeadlineUsed,
+    currentCards,
+    usedCardIds,
+    setCurrentCards,
+    replaceCard,
+    markCardAsExiting,
+    clearExitingCard,
   } = useGameStore()
 
   useTermTimer()
@@ -90,6 +76,13 @@ export default function Home() {
   const [currentDifficulty, setCurrentDifficulty] = useState<Difficulty>("hard")
   const [selectedGame, setSelectedGame] = useState<MiniGameDef | null>(null)
   const [intendedAction, setIntendedAction] = useState<"approve" | "reject">("approve")
+
+  useEffect(() => {
+    if (currentCards.length === 0) {
+      const initialCards = getInitialCards()
+      setCurrentCards(initialCards)
+    }
+  }, [currentCards.length, setCurrentCards])
 
   const worldEvents = useGameStore((state) => state.worldEvents)
   const highUrgencyCount = worldEvents.filter((e) => e.urgency === "high").length
@@ -135,6 +128,8 @@ export default function Home() {
     setModalOpen(false)
 
     if (!currentPolicy) return
+
+    markCardAsExiting(currentPolicy.id)
 
     const finalApproved = intendedAction === "approve" ? result.approved : !result.approved
 
@@ -265,12 +260,29 @@ export default function Home() {
         description: statChanges || "No change",
         details: data.advisor_comment,
       })
+
+      setTimeout(() => {
+        const nextCard = getNextCard(currentPolicy.id, finalApproved ? "approve" : "reject", usedCardIds)
+
+        if (nextCard) {
+          replaceCard(currentPolicy.id, {
+            id: nextCard.id,
+            title: nextCard.title,
+            description: nextCard.description,
+            difficulty: nextCard.difficulty,
+            type: nextCard.type,
+          })
+        }
+
+        clearExitingCard()
+      }, 500)
     } catch (error) {
       console.error("[v0] Failed to process policy:", error)
       showToast({
         title: "Error processing policy",
         description: "Using neutral outcome",
       })
+      clearExitingCard()
     }
   }
 
@@ -364,7 +376,7 @@ export default function Home() {
           </div>
 
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {POLICIES.map((policy) => (
+            {currentCards.map((policy) => (
               <PolicyCard
                 key={policy.id}
                 id={policy.id}
@@ -417,3 +429,5 @@ export default function Home() {
     </>
   )
 }
+
+export default Home
